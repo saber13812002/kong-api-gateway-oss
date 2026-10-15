@@ -1,0 +1,36 @@
+STEP 4 — VERIFICATION RESULT (s52 trial, kong-gw-trial stack)
+==============================================================
+Date (UTC):          2026-10-15
+Executor:            self-service runbook on the 172.20.1.52 console
+Command:             cd ~/kong-gateway && tar xzf step4-bundle.tgz && bash step4/run.sh
+Bundle:              step4-bundle.tgz (sha256 see run transcript, 31,715 bytes)
+
+OUTCOME:
+  deploy.sh ......... OK (echo v1.1 rebuilt; kong container recreated with
+                      KONG_PLUGINS=bundled,step4-pre,step4-post; read-only
+                      per-plugin bind mounts; deterministic endpoints
+                      verified inside the echo container)
+  configure.sh #1 ... OK (8 services + 10 isolated routes + plugin configs)
+  configure.sh #2 ... OK (idempotency proof: all PUT/find, zero creations)
+  tests.py .......... ALL 19/19 CASES PASSED (user-confirmed 2026-10-15)
+  post-state ........ baseline /test-echo route untouched; container count
+                      unchanged (kong-gw-trial-{db,migrate,kong,echo});
+                      no new public listeners
+
+Scenarios covered:
+  1 request header transform      (OSS request-transformer)      PASS
+  2 request JSON body rename      (OSS request-transformer)      PASS
+  3 response header add           (OSS response-transformer)     PASS
+  4 response JSON body rename     (custom step4-post Lua)        PASS
+  5 custom pre-processing         (custom step4-pre Lua)         PASS
+  6 custom post-processing        (step4-pre + step4-post)       PASS
+  7 combined POST both directions (both custom plugins)          PASS
+  + edge cases: empty body, non-JSON body, upstream 500,
+    missing-required-header 400, correlation-id preservation,
+    untransformed-body rejection (400)                            PASS
+
+Artifacts on s52 (canonical):
+  ~/kong-gateway/step4/results/step4-results.json   (raw per-case data)
+  ~/kong-gateway/step4/results/step4-report.txt     (human report)
+  ~/kong-gateway/step4/results/capabilities.txt     (Task A capability dump)
+  ~/kong-gateway/step4/results/raw/<case>.json
