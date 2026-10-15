@@ -1,0 +1,158 @@
+# STEP 1.2 — Kong OSS isolated trial deployment
+# Target host: s52 (172.20.1.52) — trial only, no public exposure
+# All host ports are bound to 127.0.0.1 only. PostgreSQL stays on the internal
+# Docker network. Do NOT run: docker compose down -v / docker system prune
+name: kong-gw-trial
+
+x-common-env: &kong-env
+  KONG_DATABASE: postgres
+  KONG_PG_HOST: kong-gw-db
+  KONG_PG_USER: kong
+  KONG_PG_PASSWORD: '${KONG_PG_PASSWORD}'
+  KONG_PG_DATABASE: kong
+  KONG_LOG_LEVEL: notice
+  KONG_PROXY_ACCESS_LOG: /dev/stdout
+  KONG_ADMIN_ACCESS_LOG: /dev/stdout
+  KONG_PROXY_ERROR_LOG: /dev/stderr
+  KONG_ADMIN_ERROR_LOG: /dev/stderr
+
+services:
+  kong-gw-db:
+    image: postgres:16.6-alpine
+    container_name: kong-gw-trial-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kong
+      POSTGRES_PASSWORD: '${KONG_PG_PASSWORD}'
+      POSTGRES_DB: kong
+      # trust on the internal-only network so the one-shot migration service
+      # can bootstrap without a password (the kong container still
+      # authenticates with KONG_PG_PASSWORD)
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - kong-gw-trial-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U kong -d kong']
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - kong-gw-trial-net
+
+  kong-gw-migrate:
+    image: kong:3.9.4
+    container_name: kong-gw-trial-migrate
+    # One-shot: applies pending migrations; bootstraps on a fresh DB.
+    # Exits 0 on success; kong-gw waits for this to complete successfully.
+    restart: "no"
+    command: ["bash", "-c", "kong migrations up || kong migrations bootstrap"]
+    environment:
+      <<: *kong-env
+    depends_on:
+      kong-gw-db:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - kong-gw-trial-net
+
+  kong-gw:
+    image: kong:3.9.4
+    container_name: kong-gw-trial-kong
+    restart: unless-stopped
+    # STEP 3 (Task A.3): raise fd limit to silence the ulimit-1024 warning
+    # and give headroom for benchmark load. Container-scoped only.
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+    # Default command is `kong start`. Migration is handled by the one-shot
+    # kong-gw-migrate service (gated via depends_on completed_successfully),
+    # so no command override here.
+    environment:
+      <<: *kong-env
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+      # STEP 4: activate the two custom Lua plugins (see ./step4/plugins).
+      # The plugin dir is mounted read-only into the kong image.
+      KONG_PLUGINS: bundled,step4-pre,step4-post
+    # STEP 4: mount each custom plugin dir individually so the bundled
+    # plugins under /usr/local/share/lua/5.1/kong/plugins stay visible.
+    volumes:
+      - type: bind
+        source: ./step4/plugins/step4-pre
+        target: /usr/local/share/lua/5.1/kong/plugins/step4-pre
+        read_only: true
+      - type: bind
+        source: ./step4/plugins/step4-post
+        target: /usr/local/share/lua/5.1/kong/plugins/step4-post
+        read_only: true
+    ports:
+      - "127.0.0.1:18080:8000" # Proxy (loopback only)
+      - "127.0.0.1:18001:8001" # Admin API (loopback only)
+    depends_on:
+      kong-gw-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ['CMD', 'kong', 'health']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - kong-gw-trial-net
+
+  # STEP 3 (temp benchmark client) — built on demand via
+  # `docker compose -p kong-gw-trial build kong-gw-bench`; it is NOT
+  # started by `up -d` (one-off `docker run` on the internal network).
+  kong-gw-bench:
+    build:
+      context: ./bench
+      dockerfile: Dockerfile
+    image: kong-gw-trial-bench:1.0
+    container_name: kong-gw-trial-bench
+    restart: "no"
+    profiles:
+      - bench
+    networks:
+      - kong-gw-trial-net
+
+  kong-gw-echo:
+    # STEP 2 deterministic echo backend — internal network only, no host ports.
+    # Built locally from ./echo (pinned python:3.12.11-alpine3.21 base).
+    build:
+      context: ./echo
+      dockerfile: Dockerfile
+    image: kong-gw-trial-echo:1.0
+    container_name: kong-gw-trial-echo
+    restart: unless-stopped
+    expose:
+      - "9000"
+    networks:
+      - kong-gw-trial-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  kong-gw-trial-pgdata:
+
+networks:
+  kong-gw-trial-net:
+    name: kong-gw-trial-net

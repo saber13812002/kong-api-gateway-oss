@@ -1,0 +1,6 @@
+.env
+
+# local scratch
+*.log
+tmp/
+__pycache__/
