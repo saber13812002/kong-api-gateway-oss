@@ -29,6 +29,16 @@ return {
           map = { name = "string", value = "string" },
           description = "top-level JSON body key renames: from -> to",
         },
+        max_body_bytes = {
+          type = "integer",
+          required = false,
+          default = 1048576,
+          between = { 0, 10485760 },
+          description = "maximum declared request body size (bytes) that "
+                        "will be read and transformed; 0 disables body "
+                        "handling entirely (bodies always pass through "
+                        "untransformed)",
+        },
       },
     },
   },

@@ -38,9 +38,19 @@
 --   client response until the upstream stream ends (no streaming).
 --
 -- Memory:
---   The body is accumulated in Lua memory, bounded by max_body_bytes
---   (bodies over the limit are re-emitted untouched). One extra chunk
---   (<= ngx proxy buffer size) may transiently exceed the limit.
+--   The body is accumulated in Lua memory and the budget is enforced
+--   incrementally: once accumulated bytes exceed max_body_bytes the
+--   plugin stops buffering, flushes what it has, and passes all
+--   subsequent chunks through untouched (no transform). Worst-case
+--   Lua memory for one request = max_body_bytes + one chunk
+--   (<= the nginx proxy buffer size, default 4 KiB x2).
+--
+-- Security:
+--   * No request/response secrets are logged; only neutral diagnostics.
+--   * Correlation id echoed back is either the client's own header
+--     value or a value the plugin generated — no server data.
+--   * JSON decode/encode are wrapped in pcall; malformed input falls
+--     back to the original body, never an error response.
 local cjson = require "cjson.safe"
 local kong = kong
 
@@ -111,10 +121,20 @@ function Step4Post:body_filter()
     return -- nothing to do; original stream untouched
   end
 
+  -- Budget exceeded mid-stream: stop buffering, flush, pass through.
+  if st.over_budget then
+    ngx.arg[1] = chunk
+    return
+  end
+
   if not st.parts then
     st.parts = {}
   end
   st.parts[#st.parts + 1] = chunk
+  st.total = (st.total or 0) + #chunk
+  if st.total > st.max_bytes then
+    st.over_budget = true
+  end
 
   if not is_last then
     ngx.arg[1] = "" -- swallow until the final chunk
@@ -124,13 +144,9 @@ function Step4Post:body_filter()
   local body = table.concat(st.parts)
   st.parts = nil
 
-  if st.pass_through or #body == 0 then
-    ngx.arg[1] = body -- re-emit original (empty for zero-length bodies)
-    return
-  end
-
-  if #body > st.max_bytes then
-    ngx.arg[1] = body -- too large: re-emit original untouched
+  if st.pass_through or st.over_budget or #body == 0 then
+    ngx.arg[1] = body
+    -- re-emit original (over-budget bodies pass through untouched)
     return
   end
 
