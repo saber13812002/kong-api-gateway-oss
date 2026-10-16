@@ -133,12 +133,13 @@ t-req-json), `55fe87c8-…` (response-transformer, t-resp-header),
   Every README/INSTALL command executed on the operations host; docs
   synced with
   verified semantics; setup.sh port pre-flight + /test-echo probe fixed.
-- **Phase 5 (Git readiness)** — PENDING approval. Targets: the internal
-  GitLab repository (`<internal-gitlab-host>:81/common/kong-gateway.git`)
-  + GitHub `https://github.com/saber13812002/kong-api-gateway-oss.git`,
-  both on `main`. No force push. **Public push needs explicit user
-  approval.** Pre-push: final secrets audit of tree + history, `.env`
-  gitignored, no credentials in URLs.
+- **Phase 5 (Git readiness)** — Published to GitHub `main` (2026-10-16):
+  a merge commit combining the final release (`d699447`, working tree of
+  `main`) with the previously published trial history (no force push;
+  default-branch switch to `main` is a one-click owner action).
+  Internal GitLab target (see internal ops notes): strategy pending
+  owner decision (branch vs. new project vs. merge). **No force push
+  ever; no credentials in URLs.**
 - **Phase 6 (cleanup proposal)** — PENDING (report only). Inventory of
   the two internal servers' resources + cleanup/recovery plan; **no
   deletion without explicit user approval**; the second server was
