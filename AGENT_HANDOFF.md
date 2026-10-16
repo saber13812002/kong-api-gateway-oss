@@ -1,12 +1,17 @@
 # AGENT HANDOFF — Kong OSS Gateway Final Release
 
 Context-safety snapshot (written 2026-10-16, mid-Phase-4). Phases 1–3 are
-COMPLETE and fully verified on host 53. Phases 5–6 are pending explicit
+COMPLETE and fully verified on the internal operations host. Phases 5–6
+are pending explicit
 user approval (public push) / reporting-only (cleanup).
 
-## Verified state on host 53 (`ssh jump53`)
+## Verified state on the operations host
 
-- Remote release path: `/home/saber/kong-api-gateway-oss` (identical to
+> Public-release note: concrete host names, paths and internal URLs have
+> been replaced with placeholders. The exact values live only in the
+> internal operations notes, never in this repository.
+
+- Remote release path: `<ops-user>/kong-api-gateway-oss` (identical to
   local `release/kong-api-gateway-oss/`)
 - Compose project: `kong-gw-oss` — containers `kong-gw-oss-{kong,db,echo}`
   + one-shot `migrate`/`bench`; loopback ports **18080** (proxy) /
@@ -87,51 +92,57 @@ t-req-json), `55fe87c8-…` (response-transformer, t-resp-header),
 - After `docker restart kong`, each worker needs its own cache/DNS warmup
   (first request can take ~8 s) → use probe-until-200 warmup loops.
 - Docker `NetworkSettings.Ports` `"port/tcp": null` = EXPOSED but NOT
-  published (safe); a violation is a non-null `HostPort`. Host:9000 on 53
-  is owned by an unrelated `mock-service` container — judge isolation by
+  published (safe); a violation is a non-null `HostPort`. On the shared
+  operations host, fixed host ports may be owned by unrelated containers
+  (e.g. `mock-service`) — judge isolation by
   the container's own port map, never by probing a host port.
 
 ## Environment / tooling notes (Windows side)
 
 - CRLF guard after every local edit: `python fix-crlf.py <paths>`.
 - Transfer pattern:
-  `cd release && tar -cf - kong-api-gateway-oss/<sub> | ssh jump53 "cd /home/saber && tar -xf -"`
+  `cd release && tar -cf - kong-api-gateway-oss/<sub> | ssh <ops-host> "cd <remote-dir> && tar -xf -"`
 - Run remote scripts via pipe (nested ssh quoting breaks in cmd.exe):
-  `type X.sh | ssh jump53 "cat > /tmp/X.sh && bash /tmp/X.sh 2>&1"`
+  `type X.sh | ssh <ops-host> "cat > /tmp/X.sh && bash /tmp/X.sh 2>&1"`
 - Deploy helper (reusable): `diag-kong47.sh` at the workspace root —
   luajit parse-check of all plugin files, `bash -n` on scripts, kong
   restart, admin-200 wait, /test-echo warmup.
-- **NEVER TOUCH** on 53: ragportal_*, taghrir_*, eiis_*, mesbah_*,
+- **NEVER TOUCH** on the shared operations host: ragportal_*, taghrir_*,
+  eiis_*, mesbah_*,
   vllm-*, tyk-*, open-webui, mock-*, surfsense-*, neo4j_db, qdrant,
   csghub-omnibus, iranseda-*, langgraph_app, dcgm-exporter, promtail,
   node-exporter, ollama, i3-rdp, rdp-desktop, h200-public-tunnel,
   heuristic_mclean.
-- Server 52 access was **blocked** in Phase 1/6 (no ssh target available
-  from this machine); 52 is referenced only via the GitLab URL
-  `http://172.20.1.52:81/common/kong-gateway.git`.
+- The second internal server was **unreachable** from the build machine
+  in Phase 1/6 (no ssh target available); it is referenced in this file
+  only via its GitLab repository URL (placeholder above).
 
 ## Phase status
 
 - **Phase 1 (audit)** — PASS. No real secrets in repo/Git history;
-  internal IPs inventoried (172.20.1.52/53); `push-to-gitlab.ps1` and
-  `step4/remote_exec.py` audited (no embedded credentials; host/user in
+  internal IPs inventoried and stripped from this public package;
+  `push-to-gitlab.ps1` and `step4/remote_exec.py` audited (no embedded
+  credentials; host/user in
   env/args only).
 - **Phase 2 (release package)** — PASS. Standalone, env-driven, no
   organizational IP required; syntax-validated, CRLF-normalized.
-- **Phase 3 (isolated tests + clean install on 53)** — PASS. Numbers
+- **Phase 3 (isolated tests + clean install on the operations host)** —
+  PASS. Numbers
   above; every failure found was fixed in-repo and re-run to green.
 - **Phase 4 (final README + verified commands)** — PASS (this snapshot).
-  Every README/INSTALL command executed on 53; docs synced with
+  Every README/INSTALL command executed on the operations host; docs
+  synced with
   verified semantics; setup.sh port pre-flight + /test-echo probe fixed.
-- **Phase 5 (Git readiness)** — PENDING approval. Targets: GitLab
-  `http://172.20.1.52:81/common/kong-gateway.git` + GitHub
-  `https://github.com/saber13812002/kong-api-gateway-oss.git`, both
-  `main`, identical content/commit. No force push. **Public push needs
-  explicit user approval.** Pre-push: final secrets audit of tree +
-  history, `.env` gitignored, no credentials in URLs.
+- **Phase 5 (Git readiness)** — PENDING approval. Targets: the internal
+  GitLab repository (`<internal-gitlab-host>:81/common/kong-gateway.git`)
+  + GitHub `https://github.com/saber13812002/kong-api-gateway-oss.git`,
+  both on `main`. No force push. **Public push needs explicit user
+  approval.** Pre-push: final secrets audit of tree + history, `.env`
+  gitignored, no credentials in URLs.
 - **Phase 6 (cleanup proposal)** — PENDING (report only). Inventory of
-  52/53 resources + cleanup/recovery plan; **no deletion without
-  explicit user approval**; 52 currently inaccessible.
+  the two internal servers' resources + cleanup/recovery plan; **no
+  deletion without explicit user approval**; the second server was
+  inaccessible from the build machine.
 
 ## Local scratch files to delete before handover
 
