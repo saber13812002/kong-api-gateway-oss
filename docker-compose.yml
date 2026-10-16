@@ -1,0 +1,171 @@
+# Kong OSS API Gateway — standalone Docker Compose stack.
+#
+# Fully isolated: every Docker resource (container, volume, network) is
+# namespaced with the ${COMPOSE_PROJECT_NAME} prefix (default: kong-gw-oss),
+# so the stack can coexist with any other stack on the host.
+#
+# The ONLY host ports used are the loopback-bound Proxy and Admin API
+# (never internet-exposed by default). PostgreSQL stays on the internal
+# Docker network (no host ports at all).
+#
+# Required env (copy .env.example to .env and fill in):
+#   KONG_PG_PASSWORD   strong random password for the internal PostgreSQL
+#
+# Optional env (defaults shown in .env.example):
+#   COMPOSE_PROJECT_NAME=kong-gw-oss
+#   KONG_VERSION=3.9.4   POSTGRES_VERSION=16.6-alpine
+#   KONG_PROXY_HOST=127.0.0.1  KONG_ADMIN_HOST=127.0.0.1
+#   KONG_PROXY_PORT=18080      KONG_ADMIN_PORT=18001
+#
+name: kong-gw-oss
+
+x-common-env: &kong-env
+  KONG_DATABASE: postgres
+  KONG_PG_HOST: ${COMPOSE_PROJECT_NAME}-db
+  KONG_PG_USER: kong
+  KONG_PG_PASSWORD: '${KONG_PG_PASSWORD}'
+  KONG_PG_DATABASE: kong
+  KONG_LOG_LEVEL: notice
+  KONG_PROXY_ACCESS_LOG: /dev/stdout
+  KONG_ADMIN_ACCESS_LOG: /dev/stdout
+  KONG_PROXY_ERROR_LOG: /dev/stderr
+  KONG_ADMIN_ERROR_LOG: /dev/stderr
+
+services:
+  db:
+    image: postgres:${POSTGRES_VERSION:-16.6-alpine}
+    container_name: ${COMPOSE_PROJECT_NAME}-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kong
+      POSTGRES_PASSWORD: '${KONG_PG_PASSWORD}'
+      POSTGRES_DB: kong
+      # trust on the internal-only network so the one-shot migration service
+      # can bootstrap without a password (the kong container still
+      # authenticates with KONG_PG_PASSWORD).
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U kong -d kong']
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 15s
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - internal
+
+  # One-shot: applies pending migrations; bootstraps on a fresh DB.
+  # Exits 0 on success; kong waits for this to complete successfully.
+  migrate:
+    image: kong:${KONG_VERSION:-3.9.4}
+    container_name: ${COMPOSE_PROJECT_NAME}-migrate
+    restart: "no"
+    command: ["bash", "-c", "kong migrations up || kong migrations bootstrap"]
+    environment:
+      <<: *kong-env
+    depends_on:
+      db:
+        condition: service_healthy
+    logging: *logging
+    networks:
+      - internal
+
+  kong:
+    image: kong:${KONG_VERSION:-3.9.4}
+    container_name: ${COMPOSE_PROJECT_NAME}-kong
+    restart: unless-stopped
+    # Raise the fd limit: silences the ulimit-1024 warning and gives headroom
+    # for benchmark load. Container-scoped only.
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+    # Default command is `kong start`. Migration is handled by the one-shot
+    # migrate service (gated via depends_on completed_successfully).
+    environment:
+      <<: *kong-env
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+      # Activate the two custom Lua plugins (see ./plugins).
+      # The plugin dirs are mounted read-only into the kong image.
+      KONG_PLUGINS: bundled,oss-pre,oss-post
+    # Mount each custom plugin dir individually so the bundled plugins under
+    # /usr/local/share/lua/5.1/kong/plugins stay visible.
+    volumes:
+      - type: bind
+        source: ./plugins/oss-pre
+        target: /usr/local/share/lua/5.1/kong/plugins/oss-pre
+        read_only: true
+      - type: bind
+        source: ./plugins/oss-post
+        target: /usr/local/share/lua/5.1/kong/plugins/oss-post
+        read_only: true
+    ports:
+      # Loopback only by default (KONG_PROXY_HOST / KONG_ADMIN_HOST).
+      # To serve LAN clients, set KONG_PROXY_HOST=0.0.0.0 and put TLS in
+      # front — see docs/SECURITY.md. The Admin API should STAY loopback.
+      - "${KONG_PROXY_HOST:-127.0.0.1}:${KONG_PROXY_PORT:-18080}:8000" # Proxy
+      - "${KONG_ADMIN_HOST:-127.0.0.1}:${KONG_ADMIN_PORT:-18001}:8001" # Admin API
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ['CMD', 'kong', 'health']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    logging: *logging
+    networks:
+      - internal
+
+  # Temp benchmark client — built on demand via `docker compose build bench`;
+  # it is NOT started by `up -d` (one-off `docker run` on the internal
+  # network, no host ports).
+  bench:
+    build:
+      context: ./bench
+      dockerfile: Dockerfile
+    image: ${COMPOSE_PROJECT_NAME}-bench:1.0
+    container_name: ${COMPOSE_PROJECT_NAME}-bench
+    restart: "no"
+    profiles:
+      - bench
+    networks:
+      - internal
+
+  # Deterministic echo backend — internal network only, no host ports.
+  # Its DNS name inside the network is "echo" (the compose service name);
+  # scripts use that as the upstream host (override with ECHO_HOST).
+  echo:
+    build:
+      context: ./echo
+      dockerfile: Dockerfile
+    image: ${COMPOSE_PROJECT_NAME}-echo:1.0
+    container_name: ${COMPOSE_PROJECT_NAME}-echo
+    restart: unless-stopped
+    environment:
+      ECHO_BACKEND_NAME: ${ECHO_BACKEND_NAME:-oss-echo}
+    expose:
+      - "9000"
+    networks:
+      - internal
+    logging: *logging
+
+# NOTE: top-level volume/network keys CANNOT use variable interpolation in
+# Docker Compose — the literal keys are fixed; the *resource names* are
+# namespaced via `name: ${COMPOSE_PROJECT_NAME}-...` so multiple stacks
+# coexist on one host.
+volumes:
+  pgdata:
+    name: ${COMPOSE_PROJECT_NAME}-pgdata
+
+networks:
+  internal:
+    name: ${COMPOSE_PROJECT_NAME}-net

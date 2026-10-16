@@ -1,0 +1,11 @@
+# real credentials — never commit
+.env
+
+# local scratch / results
+*.log
+tmp/
+__pycache__/
+tests/results/
+!tests/results/.gitkeep
+benchmark/results/
+!benchmark/results/.gitkeep
