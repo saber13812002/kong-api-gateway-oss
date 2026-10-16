@@ -56,8 +56,8 @@
   script (`diag_52.py`, not part of this release) contained a
   hardcoded LiteLLM API key and a master password — **rotate both
   immediately** and keep such keys in a secret manager.
-- Internal network IPs (172.20.x.x) that appeared in trial files have
-  been stripped from the public release package.
+- Internal network IPs (private RFC1918 ranges) that appeared in trial
+  files have been stripped from the public release package.
 
 ## Recommended hardening checklist for production
 
