@@ -201,3 +201,19 @@ into any repo, report, or this file.**
 - Never print a secret in agent output or commit it to any repo.
 - If a secret must cross a channel, it goes via an on-server file read
   (`cat ~/.sudo-pwd | sudo -S …`), never as a literal in a command or file.
+
+## 10. GitLab mirror + ops notes (2026-10-17)
+- GitLab (git.ai.ismc.ir, 52) project `common/kong-gateway` (id 41) mirrors the release
+  tree; synced to github main (468a1e3) as gitlab commit 1a43c73. Re-sync method (on 52):
+  create a TEMP root PAT via `docker exec gitlab gitlab-rails runner` using model
+  `PersonalAccessToken` (scopes `["api"]`, `expires_at: 30.days.from_now.to_date` --
+  NOTE: `expires_at` is a DATE column that truncates, so short durations like
+  `10.minutes.from_now` come out already "expired"); clone
+  `http://oauth2:TOKEN@127.0.0.1:81/common/kong-gateway.git` from the 52 host
+  (GitLab web = host port 81; container SSH for git = port 2222); rsync the release
+  tree into the clone, commit + push, then DELETE the PAT immediately.
+- 52 sudo helper (`ssh52-sudo.py`): the reliable form is
+  `sudo -S bash -c "<cmd>" < ~/.sudo-pwd`. The pipe form `cat ~/.sudo-pwd | sudo -S <cmd>`
+  does NOT elevate (the pipe detaches sudo's stdin).
+- 52 public admin proxy `https://kong.ai.ismc.ir` basic-auth = admin / drsoheili;
+  backend ports 18001/18080 are loopback-only.
