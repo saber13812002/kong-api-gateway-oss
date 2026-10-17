@@ -1,7 +1,7 @@
-﻿# AGENT HANDOFF ΓÇö Kong OSS Gateway Final Release
+# AGENT HANDOFF — Kong OSS Gateway Final Release
 
-Context-safety snapshot (written 2026-10-16, mid-Phase-4). Phases 1ΓÇô3 are
-COMPLETE and fully verified on the internal operations host. Phases 5ΓÇô6
+Context-safety snapshot (written 2026-10-16, mid-Phase-4). Phases 1–3 are
+COMPLETE and fully verified on the internal operations host. Phases 5–6
 are pending explicit
 user approval (public push) / reporting-only (cleanup).
 
@@ -13,22 +13,22 @@ user approval (public push) / reporting-only (cleanup).
 
 - Remote release path: `<ops-user>/kong-api-gateway-oss` (identical to
   local `release/kong-api-gateway-oss/`)
-- Compose project: `kong-gw-oss` ΓÇö containers `kong-gw-oss-{kong,db,echo}`
+- Compose project: `kong-gw-oss` — containers `kong-gw-oss-{kong,db,echo}`
   + one-shot `migrate`/`bench`; loopback ports **18080** (proxy) /
   **18001** (admin); Kong **3.9.4**, PostgreSQL **16.6-alpine**
 - Plugins bind-mounted **read-only** into
   `/usr/local/share/lua/5.1/kong/plugins/oss-{pre,post}`
 - **ALL TESTS GREEN (re-verified after final code state):**
-  - `scripts/setup.sh` idempotent re-run ΓåÆ "setup complete" (port
+  - `scripts/setup.sh` idempotent re-run → "setup complete" (port
     pre-flight exempts our own container)
-  - `scripts/smoke-test.sh` ΓåÆ **14/14**
-  - `scripts/run-tests.sh` ΓåÆ **18/18** (T01ΓÇôT18) + **9/9** (B1ΓÇôB9) boundary
-  - `scripts/security-test.sh` ΓåÆ **11/11**
-  - `scripts/restart-test.sh` standalone ΓåÆ **6/6**
-  - README "Try the demo endpoints" curls 1ΓÇô6 ΓåÆ all match documented
+  - `scripts/smoke-test.sh` → **14/14**
+  - `scripts/run-tests.sh` → **18/18** (T01–T18) + **9/9** (B1–B9) boundary
+  - `scripts/security-test.sh` → **11/11**
+  - `scripts/restart-test.sh` standalone → **6/6**
+  - README "Try the demo endpoints" curls 1–6 → all match documented
     behavior (auth 400 JSON, rename, `X-Oss-Post`, chunked framing,
     `X-Correlation-Id: demo-1` echo)
-  - `scripts/benchmark.sh` (3├ù100, concurrency 1, adaptive warmup):
+  - `scripts/benchmark.sh` (3×100, concurrency 1, adaptive warmup):
     direct mean **1.017 ms** (rps 958), via-Kong mean **1.427 ms**
     (rps 674), **overhead +0.410 ms mean / +0.546 ms p95**, 0 failures.
     Artifacts: `benchmark/results/`
@@ -48,30 +48,30 @@ Services (all `host=echo:9000`):
 `secure-echo-svc=55433b6b-02cc-420e-9ee0-f929fedf122a`
 `combined-svc=9f33f6f1-86d2-4c9b-949f-e79b04196fb1`
 
-Routes (12): `test-echo-route=4caf2e9b-ΓÇª`, `t-req-header-route=05435735-ΓÇª`,
-`t-req-json-route=aca05b7c-ΓÇª`, `t-resp-header-route=77571769-ΓÇª`,
-`t-resp-json-route=3210339e-ΓÇª` (`/fixed-ok`), `t-resp-edge-empty=fc3e30b3-ΓÇª`
-(`/empty`), `t-resp-edge-notjson=12974e5b-ΓÇª` (`/not-json`),
-`t-resp-edge-error=fad5916d-ΓÇª` (`/echo-error`), `t-pre-route=9b42e937-ΓÇª`
-(`/t-pre`), `t-post-route=53f471cd-ΓÇª` (`/t-post`),
-`secure-echo-route=c181e473-ΓÇª` (`/secure-echo`),
-`combined-route=41517880-ΓÇª` (`/combined-echo`).
+Routes (12): `test-echo-route=4caf2e9b-…`, `t-req-header-route=05435735-…`,
+`t-req-json-route=aca05b7c-…`, `t-resp-header-route=77571769-…`,
+`t-resp-json-route=3210339e-…` (`/fixed-ok`), `t-resp-edge-empty=fc3e30b3-…`
+(`/empty`), `t-resp-edge-notjson=12974e5b-…` (`/not-json`),
+`t-resp-edge-error=fad5916d-…` (`/echo-error`), `t-pre-route=9b42e937-…`
+(`/t-pre`), `t-post-route=53f471cd-…` (`/t-post`),
+`secure-echo-route=c181e473-…` (`/secure-echo`),
+`combined-route=41517880-…` (`/combined-echo`).
 
 Plugins (11, all service-linked via nested endpoints):
-`9a528fb1-ΓÇª` (request-transformer, t-req-header),
-`f7bcd43d-ΓÇª` (request-transformer remove+`add.body` `"key:value"` no-space,
-t-req-json), `55fe87c8-ΓÇª` (response-transformer, t-resp-header),
-`3721fe0a-ΓÇª` (oss-post, t-resp-json), `851337f6-ΓÇª` (oss-post, t-resp-edge),
-`6ebf8a0c-ΓÇª` (oss-pre, t-pre), `756750a2-ΓÇª` (oss-pre, t-post),
-`232133e1-ΓÇª` (oss-post, t-post), `485105bb-ΓÇª` (oss-pre, secure-echo),
-`346089dc-ΓÇª` (oss-pre, combined), `1cce3dde-ΓÇª` (oss-post, combined).
+`9a528fb1-…` (request-transformer, t-req-header),
+`f7bcd43d-…` (request-transformer remove+`add.body` `"key:value"` no-space,
+t-req-json), `55fe87c8-…` (response-transformer, t-resp-header),
+`3721fe0a-…` (oss-post, t-resp-json), `851337f6-…` (oss-post, t-resp-edge),
+`6ebf8a0c-…` (oss-pre, t-pre), `756750a2-…` (oss-pre, t-post),
+`232133e1-…` (oss-post, t-post), `485105bb-…` (oss-pre, secure-echo),
+`346089dc-…` (oss-pre, combined), `1cce3dde-…` (oss-post, combined).
 
 ## Kong 3.9.4 API contracts verified from container source
 
 - Raw request body replacement in `access`:
   `kong.service.request.set_raw_body(str)` + explicit
   `kong.service.request.set_header("Content-Length", #str)` (same as
-  bundled request-transformer). `set_body(str)` ΓåÆ "args must be a table".
+  bundled request-transformer). `set_body(str)` → "args must be a table".
 - Response headers: no `kong.service.response.set_header`; use
   `header_filter` + `ngx.header[name] = value`;
   `ngx.header["Content-Length"] = nil` forces chunked framing.
@@ -80,21 +80,21 @@ t-req-json), `55fe87c8-ΓÇª` (response-transformer, t-resp-header),
 - request-transformer `transform_json_body`: `replace.body` overwrites
   **existing** keys only; `add.body` sets **absent** keys only (hence
   remove + add for key replacement); pair parser
-  `^([^:]+):*(.-)$` keeps the raw remainder ΓåÆ **no space after colon**.
-- Admin `GET /status` ΓåÆ `{database, memory, server}`; health signal is
+  `^([^:]+):*(.-)$` keeps the raw remainder → **no space after colon**.
+- Admin `GET /status` → `{database, memory, server}`; health signal is
   `database.reachable == true`.
 - Admin full-update semantics: top-level PUT without `service` NULLS the
-  relation ΓåÆ always use nested
+  relation → always use nested
   `PUT /services/{id}/routes/{rid}` and `PUT /services/{id}/plugins/{pid}`.
 - After a plugin PUT, one worker may briefly serve stale config
-  (cluster-event propagation) ΓÇö verify live config / re-run before
+  (cluster-event propagation) — verify live config / re-run before
   concluding a bug.
 - After `docker restart kong`, each worker needs its own cache/DNS warmup
-  (first request can take ~8 s) ΓåÆ use probe-until-200 warmup loops.
+  (first request can take ~8 s) → use probe-until-200 warmup loops.
 - Docker `NetworkSettings.Ports` `"port/tcp": null` = EXPOSED but NOT
   published (safe); a violation is a non-null `HostPort`. On the shared
   operations host, fixed host ports may be owned by unrelated containers
-  (e.g. `mock-service`) ΓÇö judge isolation by
+  (e.g. `mock-service`) — judge isolation by
   the container's own port map, never by probing a host port.
 
 ## Environment / tooling notes (Windows side)
@@ -104,7 +104,7 @@ t-req-json), `55fe87c8-ΓÇª` (response-transformer, t-resp-header),
   `cd release && tar -cf - kong-api-gateway-oss/<sub> | ssh <ops-host> "cd <remote-dir> && tar -xf -"`
 - Run remote scripts via pipe (nested ssh quoting breaks in cmd.exe):
   `type X.sh | ssh <ops-host> "cat > /tmp/X.sh && bash /tmp/X.sh 2>&1"`
-- Deploy helper (reusable): `diag-kong47.sh` at the workspace root ΓÇö
+- Deploy helper (reusable): `diag-kong47.sh` at the workspace root —
   luajit parse-check of all plugin files, `bash -n` on scripts, kong
   restart, admin-200 wait, /test-echo warmup.
 - **NEVER TOUCH** on the shared operations host: ragportal_*, taghrir_*,
@@ -119,49 +119,49 @@ t-req-json), `55fe87c8-ΓÇª` (response-transformer, t-resp-header),
 
 ## Phase status
 
-- **Phase 1 (audit)** ΓÇö PASS. No real secrets in repo/Git history;
+- **Phase 1 (audit)** — PASS. No real secrets in repo/Git history;
   internal IPs inventoried and stripped from this public package;
   `push-to-gitlab.ps1` and `step4/remote_exec.py` audited (no embedded
   credentials; host/user in
   env/args only).
-- **Phase 2 (release package)** ΓÇö PASS. Standalone, env-driven, no
+- **Phase 2 (release package)** — PASS. Standalone, env-driven, no
   organizational IP required; syntax-validated, CRLF-normalized.
-- **Phase 3 (isolated tests + clean install on the operations host)** ΓÇö
+- **Phase 3 (isolated tests + clean install on the operations host)** —
   PASS. Numbers
   above; every failure found was fixed in-repo and re-run to green.
-- **Phase 4 (final README + verified commands)** ΓÇö PASS (this snapshot).
+- **Phase 4 (final README + verified commands)** — PASS (this snapshot).
   Every README/INSTALL command executed on the operations host; docs
   synced with
   verified semantics; setup.sh port pre-flight + /test-echo probe fixed.
-- **Phase 5 (Git readiness)** ΓÇö Published to GitHub `main` (2026-10-16):
+- **Phase 5 (Git readiness)** — Published to GitHub `main` (2026-10-16):
   a merge commit combining the final release (`d699447`, working tree of
   `main`) with the previously published trial history (no force push;
   default-branch switch to `main` is a one-click owner action).
   Internal GitLab target (see internal ops notes): strategy pending
   owner decision (branch vs. new project vs. merge). **No force push
   ever; no credentials in URLs.**
-- **Phase 6 (cleanup proposal)** ΓÇö PENDING (report only). Inventory of
+- **Phase 6 (cleanup proposal)** — PENDING (report only). Inventory of
   the two internal servers' resources + cleanup/recovery plan; **no
   deletion without explicit user approval**; the second server was
   inaccessible from the build machine.
 
 ## Local scratch files to delete before handover
 
-`diag-kong*.sh` (1ΓÇô53), `verify-lua.sh`, `fix-crlf.py`, `crlf-report.txt`
-at the workspace root (outside the release folder ΓÇö never committed).
+`diag-kong*.sh` (1–53), `verify-lua.sh`, `fix-crlf.py`, `crlf-report.txt`
+at the workspace root (outside the release folder — never committed).
 
 ---
 
 ## 8. LIVE DEPLOYMENT STATUS (as of 2026-10-17)
 
-### 53 (172.20.1.53, GPU) ΓÇö "kong-gw-oss" stack
+### 53 (172.20.1.53, GPU) — "kong-gw-oss" stack
 - Containers up: kong-gw-oss-kong (127.0.0.1:18080->8000, 127.0.0.1:18001->8001), kong-gw-oss-echo, kong-gw-oss-db.
 - Kong: 10 routes, 2 services, oss-pre/oss-post plugins on /oss/echo.
 - Admin API: 127.0.0.1:18001 (loopback-only) + LAN proxy http://172.20.1.53:18002 (basic auth).
 - Auth users (nginx basic auth): admin / drsoheili.
 - Repo at ~/kong-api-gateway-oss == github main (37d0d92).
 
-### 52 (172.20.1.52, no GPU) ΓÇö "kong-gw-trial" stack
+### 52 (172.20.1.52, no GPU) — "kong-gw-trial" stack
 - Containers up: kong-gw-trial-kong (127.0.0.1:18080, 127.0.0.1:18001), kong-gw-trial-echo, kong-gw-trial-db, plus kong-admin-auth-52 (LAN proxy on 0.0.0.0:8001, basic auth).
 - Public domain: https://kong.ai.ismc.ir -> BaoTa nginx (52) -> 127.0.0.1:18001, basic auth (admin/drsoheili), Let's Encrypt cert (webroot /www/acme, auto-renew scheduled).
 - The previous catch-all behavior for this domain is now shadowed by the dedicated vhost /www/server/panel/vhost/nginx/kong.ai.ismc.ir.conf.
@@ -171,7 +171,7 @@ at the workspace root (outside the release folder ΓÇö never committed).
 
 ---
 
-## 9. SECURITY INCIDENT â€” SUDO PASSWORD ROTATION (2026-10-17)
+## 9. SECURITY INCIDENT — SUDO PASSWORD ROTATION (2026-10-17)
 
 A sudo password for `saber` (52+53) was exposed in chat reports and agent working files.
 Treated as compromised and fully rotated. **The old and new secrets must not be written
@@ -179,7 +179,7 @@ into any repo, report, or this file.**
 
 ### What was done
 1. **Rotation (52 and 53):** new random 20-char password set on both hosts via
-   `usermod -p "$(openssl passwd -6 â€¦)"`. Verified against `/etc/shadow` with
+   `usermod -p "$(openssl passwd -6 …)"`. Verified against `/etc/shadow` with
    python `crypt`: old secret matches = NO, new secret matches = YES (both hosts).
 2. **Secret storage:** new secret lives at `/root/.sudo-pwd-saber` (600, root) on each
    host, mirrored to `/home/saber/.sudo-pwd` (600, saber) on each host.
@@ -200,5 +200,4 @@ into any repo, report, or this file.**
 ### Standing rules
 - Never print a secret in agent output or commit it to any repo.
 - If a secret must cross a channel, it goes via an on-server file read
-  (`cat ~/.sudo-pwd | sudo -S â€¦`), never as a literal in a command or file.
-
+  (`cat ~/.sudo-pwd | sudo -S …`), never as a literal in a command or file.
