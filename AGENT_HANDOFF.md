@@ -168,3 +168,37 @@ at the workspace root (outside the release folder ΓÇö never committed).
 - Release copy at ~/kong-gateway-release == github main (37d0d92).
 - NOTE (52 BaoTa quirk): the panel re-locks /www/server/panel/vhost to mode 600 between sudo sessions. Any root script touching the vhost tree must run `chmod 755 /www/server/panel/vhost /www/server/panel/vhost/nginx` as its first step, in a single atomic sudo session.
 - SSH to 52: key auth on port 22 (2222 is GitLab's internal ssh, not host ssh).
+
+---
+
+## 9. SECURITY INCIDENT â€” SUDO PASSWORD ROTATION (2026-10-17)
+
+A sudo password for `saber` (52+53) was exposed in chat reports and agent working files.
+Treated as compromised and fully rotated. **The old and new secrets must not be written
+into any repo, report, or this file.**
+
+### What was done
+1. **Rotation (52 and 53):** new random 20-char password set on both hosts via
+   `usermod -p "$(openssl passwd -6 â€¦)"`. Verified against `/etc/shadow` with
+   python `crypt`: old secret matches = NO, new secret matches = YES (both hosts).
+2. **Secret storage:** new secret lives at `/root/.sudo-pwd-saber` (600, root) on each
+   host, mirrored to `/home/saber/.sudo-pwd` (600, saber) on each host.
+3. **Agent access pattern (no secret in transit):** SSH key auth as `saber` (port 22 on
+   52, default port on 53), then on-server `cat ~/.sudo-pwd | sudo -S <cmd>`.
+   The helper scripts `ssh52-sudo.py` / `ssh53-sudo.py` implement exactly this and
+   contain **no** secret.
+4. **Scrubbed:**
+   - 52 `/tmp` copies shredded (`shred -u`); syslog/tar "hits" confirmed to be
+     coincidental 6-digit substrings (timestamps/hashes), full-string count 0.
+   - 53 `/tmp` copies (47 files) shredded; repo + home = 0.
+   - Local Windows workspace: 6 one-shot scripts containing the secret deleted;
+     remaining helpers contain no secret. `release/`, `kong-gateway/` clean.
+   - GitHub repo (saber13812002/kong-api-gateway-oss): full-history pickaxe
+     (`git log --all -S` and `-G`) = 0 hits, working tree = 0.
+   - 52 GitLab storage: grep over the gitlab repository dir = 0.
+
+### Standing rules
+- Never print a secret in agent output or commit it to any repo.
+- If a secret must cross a channel, it goes via an on-server file read
+  (`cat ~/.sudo-pwd | sudo -S â€¦`), never as a literal in a command or file.
+
