@@ -254,3 +254,37 @@ touched), tested with `return 200` markers and then proxying to Kong:18001.
 - Kong's own admin API (18001) has NO auth of its own (200 to everything on
   loopback) — the ONLY auth gate is the nginx `auth_basic` on 443. Keep that
   vhost intact at all times.
+
+## 12. OPS PANEL DEPLOYMENT (2026-10-18)
+
+Read-only ops dashboard for the 52 Kong stack, served at
+`https://kong.ai.ismc.ir/panel/` — behind the **same** `auth_basic` gate as the
+rest of the domain (no new exposure, no new credentials).
+
+### What it shows (all live, 15 s auto-refresh)
+- Kong node state + version (3.9.4), database reachability
+- Requests handled / active connections
+- Object counts: services, routes, consumers, plugins, upstreams (first names)
+- Kong container log tail (80 lines) and nginx error-log tail (40 lines)
+
+### Components (52)
+| Item | Location |
+| --- | --- |
+| App source | `~/kong-panel/app.py` (Python stdlib only, no pip) |
+| Container | `kong-gw-panel` (image `python:3.12-alpine`, `--entrypoint python3`) |
+| Network | `kong-gw-trial-net` (reaches Kong admin via service name `kong-gw-trial-kong:8001`) |
+| Host port | `127.0.0.1:18090:8090` only (loopback; not exposed on 0.0.0.0) |
+| Read-only mounts | `app.py`, `/var/lib/docker/containers` (kong log), `/www/server/nginx/logs` (error.log) |
+| vhost | `/panel/` + `location = /panel` (301) added to `/www/server/panel/vhost/nginx/kong.ai.ismc.ir.conf` (backup `~/kong-panel/vhost-kong-ai-ismc-ir.conf.bak-20261018`) |
+
+### Ops
+- Restart: `docker restart kong-gw-panel`
+- Update app: replace `~/kong-panel/app.py`, `docker restart kong-gw-panel`
+- Deploy script (idempotent): workspace `deploy-panel52.sh`
+- Panel is strictly GET-only; it never writes to Kong.
+
+### Verified
+- loopback: page 200, api/status 200, collections (services=1, routes=1), logs ok
+- 443: `/panel/` no-auth → 401 (auth gate active), `/panel` → 401 (gate before 301)
+- prod path unchanged: `/status` no-auth → 401
+- Kong `/nodes` endpoint is 404 on this build → panel falls back to `/` for version
