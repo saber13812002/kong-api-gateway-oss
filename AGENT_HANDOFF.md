@@ -171,7 +171,7 @@ at the workspace root (outside the release folder ΓÇö never committed).
 
 ---
 
-## 9. SECURITY INCIDENT ΓÇö SUDO PASSWORD ROTATION (2026-10-17)
+## 9. SECURITY INCIDENT — SUDO PASSWORD ROTATION (2026-10-17)
 
 A sudo password for `saber` (52+53) was exposed in chat reports and agent working files.
 Treated as compromised and fully rotated. **The old and new secrets must not be written
@@ -179,7 +179,7 @@ into any repo, report, or this file.**
 
 ### What was done
 1. **Rotation (52 and 53):** new random 20-char password set on both hosts via
-   `usermod -p "$(openssl passwd -6 ΓÇª)"`. Verified against `/etc/shadow` with
+   `usermod -p "$(openssl passwd -6 …)"`. Verified against `/etc/shadow` with
    python `crypt`: old secret matches = NO, new secret matches = YES (both hosts).
 2. **Secret storage:** new secret lives at `/root/.sudo-pwd-saber` (600, root) on each
    host, mirrored to `/home/saber/.sudo-pwd` (600, saber) on each host.
@@ -200,20 +200,57 @@ into any repo, report, or this file.**
 ### Standing rules
 - Never print a secret in agent output or commit it to any repo.
 - If a secret must cross a channel, it goes via an on-server file read
-  (`cat ~/.sudo-pwd | sudo -S ΓÇª`), never as a literal in a command or file.
+  (`cat ~/.sudo-pwd | sudo -S …`), never as a literal in a command or file.
 
-## 10. GitLab mirror + ops notes (2026-10-17)
-- GitLab (git.ai.ismc.ir, 52) project `common/kong-gateway` (id 41) mirrors the release
-  tree; synced to github main (468a1e3) as gitlab commit 1a43c73. Re-sync method (on 52):
-  create a TEMP root PAT via `docker exec gitlab gitlab-rails runner` using model
-  `PersonalAccessToken` (scopes `["api"]`, `expires_at: 30.days.from_now.to_date` --
-  NOTE: `expires_at` is a DATE column that truncates, so short durations like
-  `10.minutes.from_now` come out already "expired"); clone
-  `http://oauth2:TOKEN@127.0.0.1:81/common/kong-gateway.git` from the 52 host
-  (GitLab web = host port 81; container SSH for git = port 2222); rsync the release
-  tree into the clone, commit + push, then DELETE the PAT immediately.
-- 52 sudo helper (`ssh52-sudo.py`): the reliable form is
-  `sudo -S bash -c "<cmd>" < ~/.sudo-pwd`. The pipe form `cat ~/.sudo-pwd | sudo -S <cmd>`
-  does NOT elevate (the pipe detaches sudo's stdin).
-- 52 public admin proxy `https://kong.ai.ismc.ir` basic-auth = admin / drsoheili;
-  backend ports 18001/18080 are loopback-only.
+---
+
+## 11. SUDOERS MIGRATION + ADMIN-PROXY AUTH CHECK (2026-10-18)
+
+Follow-up to §9/§10: removed the standing risk of a sudo password file and ran an
+independent check of the public admin-proxy auth.
+
+### 11.1 Scoped sudoers (replaces password-driven sudo for scoped work)
+- **52** `/etc/sudoers.d/saber-ops` (0440, root):
+  `saber ALL=(root) NOPASSWD: /usr/sbin/nginx, /usr/bin/nginx, /www/server/nginx/sbin/nginx, /usr/bin/systemctl, /usr/bin/ss, /usr/bin/journalctl, /usr/bin/chmod`
+  - All scoped commands verified passwordless (`sudo -n`); negative control
+    (unscoped `ls /`) correctly DENIED; `tee`/`chown`/`apt-get` deliberately NOT
+    included (first cut was too broad and was tightened).
+  - **`/home/saber/.sudo-pwd` on 52 was securely deleted (`shred -u`)** after all
+    scoped checks passed. There is no sudo-password fallback on 52.
+  - Helper `ssh52-sudo.py` now runs `sudo -n <cmd>` (single binary per rule;
+    compound commands are denied by design).
+- **53** `/etc/sudoers.d/saber-ops` (0440, root):
+  `saber ALL=(root) NOPASSWD: /usr/bin/gitlab-runner verify|status|registry list, /usr/bin/systemctl restart|status|is-active gitlab-runner`
+  (kong-gw-oss is docker-managed; saber is in the `docker` group, so no sudo is
+  needed there). Negative controls (unscoped `ls`, `gitlab-runner register`)
+  correctly DENIED.
+  - **`/home/saber/.sudo-pwd` on 53 is KEPT** — 53's `/etc/sudoers` contains a
+    broad `saber ALL=(ALL : ALL) ALL` line that cannot be removed without root.
+    The password file remains the documented fallback for out-of-scope commands;
+    `ssh53-sudo.py` tries `sudo -n` first and only falls back to the file on denial.
+- Removing 53's broad `(ALL : ALL) ALL` rule needs a one-time root session
+  (console or a temporary NOPASSWD rule) — left as a known follow-up.
+
+### 11.2 Admin-proxy independent auth check (52) — DEFINITIVE
+Method: throwaway test vhosts (own cert, known credentials, no prod vhost
+touched), tested with `return 200` markers and then proxying to Kong:18001.
+- **nginx `auth_basic` works perfectly on this host:** with a known-cred test
+  htpasswd on a 443 vhost (unique SNI) → no-auth = **401 + correct realm**,
+  wrong-cred = 401, correct-cred = 200 (Kong status returned through).
+- `/etc/nginx-htpasswd-kong` is **byte-identical (md5) to its pre-check backup**
+  `*.bak-20261017` (3c6b4a23…); file integrity confirmed.
+- Production proxy verified after all cleanup: no-auth → **401**
+  (`WWW-Authenticate: Basic realm="Kong Admin"`), Kong 18001 serving normally.
+- **CONFIRMED CREDENTIAL MISMATCH (unresolved, needs owner input):**
+  `admin/drsoheili` is rejected (401) on 52's public proxy AND 53's LAN proxy
+  (18002), and `drsoheili` matches neither stored apr1 hash. The file contains
+  `admin:<unknown-hash>` and `drsoheili:<hash that does not match "drsoheili">`
+  (the user line is named `drsoheili`, not `admin`). So **no currently
+  documented password opens the public admin proxy.** The owner believes
+  `admin/drsoheili` works — the working secret must be recovered (on-server:
+  53's `kong-admin-auth` container env/config, or 52's original setup notes)
+  and `/etc/nginx-htpasswd-kong` reconciled. **Treat `admin/drsoheili` as
+  UNVERIFIED until then.**
+- Kong's own admin API (18001) has NO auth of its own (200 to everything on
+  loopback) — the ONLY auth gate is the nginx `auth_basic` on 443. Keep that
+  vhost intact at all times.
