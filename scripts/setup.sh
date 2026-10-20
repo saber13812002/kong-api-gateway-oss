@@ -10,8 +10,6 @@
 # Safe to re-run: everything is an upsert / idempotent start.
 source "$(dirname "$0")/_common.sh"
 
-log "=== Kong OSS setup (project: $COMPOSE_PROJECT_NAME) ==="
-
 require_cmd docker
 require_cmd curl
 require_cmd python3
@@ -36,6 +34,17 @@ else
   fi
   log ".env found"
 fi
+
+# The first source of _common.sh ran BEFORE .env existed on a fresh
+# install, so the shell variables were already defaulted (project name
+# kong-gw-oss, ports 18080/18001). Re-source now so the values from
+# .env (COMPOSE_PROJECT_NAME, KONG_PROXY_PORT, KONG_ADMIN_PORT, ...)
+# take effect for this run — .env is loaded with set -a, so it
+# overwrites the earlier defaults.
+# shellcheck disable=SC1090
+source "$(dirname "$0")/_common.sh"
+
+log "=== Kong OSS setup (project: $COMPOSE_PROJECT_NAME, proxy :$KONG_PROXY_PORT, admin :$KONG_ADMIN_PORT) ==="
 
 # -------------------------------------------------------- compose ------
 compose config -q >/dev/null || die "docker compose config validation failed"

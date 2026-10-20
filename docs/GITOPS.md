@@ -156,3 +156,22 @@ bash scripts/backup.sh         # first snapshot of the fresh stack
 
 This exact sequence was executed as the Phase 6 acceptance test (see
 PROJECT_AUDIT.md §8).
+
+### 6.1 Running a second stack side by side (pitfall)
+
+Docker Compose namespaces containers/volumes/networks by the **project
+name** (`COMPOSE_PROJECT_NAME`) AND anchors relative bind mounts to the
+**working directory** you run it from. Two consequences:
+
+1. To run a second stack on the same host, give it a distinct project
+   name AND distinct host ports in its own `.env`
+   (`COMPOSE_PROJECT_NAME=kong-gw-2`, `KONG_PROXY_PORT=19080`,
+   `KONG_ADMIN_PORT=19001`).
+2. `docker compose up` run from a *different* directory than the one the
+   stack was created in will **recreate** the existing containers with
+   that directory's bind mounts (e.g. the `plugins/` sources). Always
+   `cd` into the stack's own checkout before running compose commands —
+   this is the failure mode the Phase 6 acceptance test exposed, and it
+   is why `setup.sh` re-sources `_common.sh` after creating `.env` so
+   the project name/ports in `.env` can never be silently shadowed by
+   the defaults on a fresh install.
