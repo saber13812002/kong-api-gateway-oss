@@ -1,6 +1,10 @@
 # real credentials — never commit
 .env
 
+# exports & backups CONTAIN key-auth keys — never commit
+_export/
+_backup/
+
 # local scratch / results
 *.log
 tmp/
