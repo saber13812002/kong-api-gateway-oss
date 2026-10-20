@@ -231,11 +231,21 @@ Clean-clone install from the new main: **ALL PASS** (doubles as the
 Phase 6 acceptance — see §8). GitLab: no mirror exists; GitHub is the
 sole canonical (documented; mirror recreation is an owner option).
 
-## Phase 8 — Deliverable README
+## Phase 8 — Deliverable README ✅ DONE
 
-Rewrite `README.md` to the mandatory 24-section structure. **Every command
-in it is executed during Phase 10**; untested commands are labeled, not
-claimed.
+**Result (2026-10-20):** `README.md` fully rewritten to the mandatory
+24-section structure (commit `d99891d`, pushed to `main`): 1 Overview,
+2 capability matrix (tagged, OSS gaps explicit), 3 Architecture, 4
+Prerequisites, 5 Quick start, 6 Configuration, 7 Repository layout, 8
+Routes, 9 Custom plugins, 10 Management UI, 11 AI gateway, 12 Static API
+docs, 13 GitOps scripts, 14 Testing, 15 Security posture, 16 Benchmark,
+17 Logs, 18 Operations/multi-env, 19 Troubleshooting, 20 OSS
+limitations, 21 nine Admin API pitfalls, 22 Documentation & training map,
+23 AI-agent workflow, 24 Verification status & re-verify procedure.
+**Every command in it is executed during Phase 10**; untested commands
+are labeled, not claimed. Host-specific references (52/53) are labeled
+as such. Sanitization scan clean; LF line endings verified; mirrored to
+`release/` (scratch only).
 
 ## Phase 9 — Training course
 
