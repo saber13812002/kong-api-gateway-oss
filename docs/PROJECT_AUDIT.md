@@ -541,3 +541,106 @@ Three real pitfalls were hit and fixed (all live-verified):
   CREDS file and inside Kong's DB.
 - Rate-limit counters are the only state "consumed" by tests (self-clearing
   rolling windows; T4 clears the minute explicitly).
+
+## 8. Phase 6 execution results — Config unification & GitOps
+
+### 8.1 Deliverables (all in-repo, committed, sanitized)
+
+| File | Purpose |
+|---|---|
+| `scripts/backup.sh` | Snapshot = declarative export (`kong-gateway.json` + `.yml` twin) + `pg_dump` + `manifest.json` (sha256 of every file + kong version); dir mode 700; prunes to 10 oldest (`BACKUP_KEEP`) |
+| `scripts/restore.sh` | `<snapshot> --config` (additive, idempotent import — never deletes) or `--database` (full rewind: DROP/CREATE + `psql` import). Always takes an automatic safety snapshot first and hash-verifies the snapshot against its manifest before touching anything |
+| `scripts/rollback.sh` | `--list` (snapshots + age) or `<snapshot>` → declarative rollback + `smoke-test.sh` |
+| `docs/GITOPS.md` | GitOps loop, export hygiene (exports contain key-auth keys — why `_export/`/`_backup/` are git-ignored), backup/cron guidance, restore modes, rollback runbook, multi-env table, clean-clone procedure, compose working-dir pitfall (§6.1) |
+| `.gitignore` | added `_export/` and `_backup/` |
+
+### 8.2 Clean-clone acceptance test (Phase 6 + Phase 7 acceptance)
+
+Probe (all green): git 2.43, GitHub public 200, ports 19080/19001 free,
+348G free disk, no existing cleantest stack.
+
+Test procedure (`clean-clone53.sh` on 53): fresh `git clone --depth 1` of
+main into a disposable dir → point `.env.example` at
+`kong-gw-cleantest` / 19080 / 19001 → `setup.sh` → `smoke-test.sh` →
+`run-tests.sh` (18 mandatory + 9 boundary) → `backup.sh` → production
+untouched check.
+
+| Run | Commit | Result |
+|---|---|---|
+| 1 | `60994bd` | FAIL — exposed bug #1 (§8.3); production side-effect (§8.4) |
+| 2 | `954c6e4` | setup now runs as `kong-gw-cleantest` (production untouched); tests 404'd — exposed bug #2 |
+| 3 | `6585786` | **CLEAN-CLONE-RESULT: FAILS=0 — ALL PASS** |
+
+Run 3 detail (fresh clone of main, nothing pre-provisioned):
+
+- `setup.sh` PASS — .env auto-created (random PG password, mode 600),
+  image built, containers healthy, 10 services / 12 routes / 11 plugins
+  configured, data-plane convergence wait returned 200 after ~10 s
+- `smoke-test.sh` — **14/14 PASS**
+- `run-tests.sh` — **18/18 PASS** (T15: p50=1.201 ms, p95=2.049 ms,
+  p99=2.298 ms; T16: 0 errors / 200 mixed requests) **+ 9/9 boundary PASS**
+- `backup.sh` PASS — first snapshot of the fresh stack, 3 files hashed
+- production check — 18080/18001 responding, zero interference
+
+Teardown: `compose -p kong-gw-cleantest down` (deliberately **without**
+`-v`), clone dir removed; the volume `kong-gw-cleantest-pgdata` was left
+in place for the Phase 11 owner decision. Production plugin mounts were
+verified still anchored to the production directory before and after the
+clone dir deletion.
+
+### 8.3 Two genuine product bugs found by the acceptance test (both fixed, both pushed)
+
+1. **`setup.sh` .env timing** (fixed in `954c6e4`): `_common.sh` is
+   sourced at the top of `setup.sh`, i.e. *before* the .env creation
+   block. On a fresh clone `.env` does not exist yet, so the shell
+   variables were already defaulted (`kong-gw-oss`, 18080/18001) and the
+   values written into the just-created `.env` were silently ignored.
+   The test stack ran as the production project name. Fix: re-source
+   `_common.sh` after the .env block (its `set -a` load overwrites the
+   earlier defaults); the header log now prints the final project name
+   and ports.
+2. **Data-plane convergence** (fixed in `6585786`): Kong loads DB config
+   into the data plane asynchronously (`db_update_freq`). Right after
+   `configure.sh` creates the routes, the proxy can answer 404 for up to
+   ~30 s even though the Admin API already serves the routes (observed
+   live: all 12 routes present in Admin, every proxy request 404 until
+   the cache caught up). `setup.sh` declared FAIL at that point. Fix:
+   poll `/test-echo` for up to 120 s before declaring setup complete, so
+   a fresh install returns only when it is genuinely ready.
+
+### 8.4 Damage and repair (disclosed, fully repaired) — run 1 side effect
+
+- Run 1's `compose up -d --build` executed as project `kong-gw-oss` from
+  the *clone* directory, so Docker Compose **recreated the production
+  containers** `kong-gw-oss-{db,echo,migrate,kong}` and re-anchored the
+  kong container's plugin bind mounts to
+  `/home/<user>/kong-clean-test/plugins/{oss-pre,oss-post}`.
+- **No data loss**: the `kong-gw-oss-pgdata` volume was untouched; all
+  configuration data survived. `configure.sh` from the test run died
+  before applying anything (wrong port).
+- Repair (executed, verified): `docker compose -p kong-gw-oss up -d`
+  from the production directory re-created the kong container with the
+  correct mounts; re-verified `ai-test53.sh` **9/9 PASS**, inventory
+  **11 services / 13 routes / 15 plugins**, `/test-echo` 200,
+  `/status` 200.
+- Prevention: fix #1 makes the project name come from `.env` on every
+  fresh install; `docs/GITOPS.md` §6.1 documents the compose
+  project-name/working-directory pitfall (always `cd` into a stack's own
+  checkout before compose commands).
+
+### 8.5 Multi-environment (documented in GITOPS.md)
+
+dev `kong-gw-dev` 18080/18001 · staging `kong-gw-staging` 19080/19001
+(proven by the clean-clone run) · prod `kong-gw-prod` loopback behind
+TLS. Admin API always loopback-only.
+
+### 8.6 Phase 6 not-changed (explicit)
+
+- No production config on 53 was modified by this phase (AI gateway
+  route and inventory unchanged; the only production change was the
+  container recreation/repair in §8.4).
+- 52 untouched in this phase.
+- No secrets committed: `_export/`/`_backup/` are git-ignored; snapshot
+  dirs are mode 700 on 53.
+- Left for Phase 11 (owner decision): the `kong-gw-cleantest-pgdata`
+  volume and the `/tmp/*.sh` test scripts on 53.

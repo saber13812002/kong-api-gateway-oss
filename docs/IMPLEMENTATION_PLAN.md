@@ -193,26 +193,43 @@ Kong. 5 new Kong 3.9.4 Admin API findings recorded (see PROJECT_AUDIT.md
   LiteLLM when present. Provider keys stay in the AI tier, never in Kong
   config or logs.
 
-## Phase 6 — Config unification & GitOps
+## Phase 6 — Config unification & GitOps ✅ DONE
 
-- One canonical compose + `.env.example` (no secrets), split config/secrets.
-- Idempotent `scripts/` (already 95 % there): add `export.sh` (declarative
-  Kong config → `kong-declarative.yaml`), `import.sh`, `backup.sh`
-  (pg_dump + declarative + htpasswd refs), `restore.sh`, `rollback.sh`.
-- Multi-env guide (dev/staging/prod) + rollback runbook.
-- Clean-install test: fresh `git clone` on 52 (new dir, new project name to
-  avoid clobbering trial) → `setup.sh` → `smoke-test.sh` → `run-tests.sh`.
+**Result (2026-10-20, executed on 53):** `backup.sh` (declarative export +
+pg_dump + sha256 manifest, mode 700, prune 10), `restore.sh`
+(`--config` additive / `--database` full rewind; auto safety snapshot +
+hash verify), `rollback.sh` (`--list` + declarative rollback + smoke),
+`docs/GITOPS.md` (loop, hygiene, runbook, multi-env, clean-clone,
+compose working-dir pitfall), `.gitignore` covers `_export/`/`_backup/`.
+Clean-clone acceptance on 53 from GitHub main (disposable project
+`kong-gw-cleantest` on 19080/19001): **ALL PASS** — setup + 14/14 smoke +
+18/18 tests + 9/9 boundary + first backup; production verified untouched.
+The acceptance run exposed and fixed two genuine product bugs:
+(1) `setup.sh` sourced `_common.sh` before creating `.env`, so a fresh
+install silently ignored the .env project name/ports (commit `954c6e4`);
+(2) data-plane config convergence — proxy 404s up to ~30 s after route
+creation (commit `6585786` adds a 120 s convergence wait). Run 1's
+production side effect (container recreation from the clone dir) was
+disclosed, repaired, and re-verified (AI tests 9/9, inventory
+11/13/15). Details: PROJECT_AUDIT.md §8.
 
-## Phase 7 — GitHub canonicalization
+## Phase 7 — GitHub canonicalization ✅ DONE
 
-1. Merge 53's two local commits into `main` (docs-only; fast-forwardable
-   after rebase), push (no force, no rewrite).
-2. Add Phase 0/1+ docs (audit, plan, results, security, training) — all
-   sanitized (no internal IPs, no personal paths, no secrets).
-3. Keep Windows `release/` as a scratch mirror only; never push from it.
-4. Re-run clean-clone install from the new `main` (Phase 6 test doubles).
-5. GitLab: **no mirror exists** (stale docs) — document GitHub as sole
-   canonical; optionally owner re-creates a mirror + sync method.
+**Result (2026-10-20):** the `release/` tree was verified to strictly
+supersede the root git checkout (content-identical except CRLF + one
+encoding-fixed file) and folded into the root checkout. Sanitization
+scan (45 hits: 13 internal IPs, 30 personal paths, 2 documented
+test-fixture creds) neutralized: LAN IPs → TEST-NET-2 `198.51.100.x`,
+personal paths → `/home/<user>`, AI backend default → 127.0.0.1, fixture
+creds commented. `yaml2json` re-verified 26/26. Commits pushed to the
+public GitHub `main` (see the repo URL in the clone script) with normal
+pushes,
+no force, no rewrite: `633cee4` → `7da0751` → `6291466` → `60994bd`
+→ `954c6e4` (setup.sh .env fix) → `6585786` (data-plane convergence
+fix) → docs commit. `release/` remains a scratch mirror only.
+Clean-clone install from the new main: **ALL PASS** (doubles as the
+Phase 6 acceptance — see §8). GitLab: no mirror exists; GitHub is the
+sole canonical (documented; mirror recreation is an owner option).
 
 ## Phase 8 — Deliverable README
 
