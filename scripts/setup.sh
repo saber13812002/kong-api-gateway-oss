@@ -74,11 +74,19 @@ wait_admin 60
 log "applying Admin API configuration (idempotent)"
 bash "$SCRIPT_DIR/configure.sh"
 
-# ---------------------------------------------------- smoke ------------
-# NOTE: the proxy has no /status route (only the Admin API does); the
-# baseline /test-echo is the correct end-to-end readiness probe.
-code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$PROXY_URL/test-echo")"
-[ "$code" = "200" ] || die "proxy /test-echo returned $code after setup"
+# ------------------------------------------- data-plane convergence -----
+# Kong loads DB config into the data plane asynchronously (db_update_freq).
+# Right after configure.sh creates the routes, /test-echo can still return
+# 404 for up to ~30 s — poll until the proxy actually serves the route.
+log "waiting for the data plane to pick up the new config (route /test-echo)"
+ok=""
+for i in $(seq 1 60); do
+  code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$PROXY_URL/test-echo" || true)"
+  [ "$code" = "200" ] && { ok=1; break; }
+  sleep 2
+done
+[ -n "$ok" ] || die "proxy /test-echo returned $code after setup (data plane did not converge within 120s)"
+log "data plane converged (proxy /test-echo -> 200)"
 
 log "setup complete"
 log "  proxy : $PROXY_URL"
