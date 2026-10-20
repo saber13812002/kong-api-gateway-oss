@@ -247,13 +247,18 @@ are labeled, not claimed. Host-specific references (52/53) are labeled
 as such. Sanitization scan clean; LF line endings verified; mirrored to
 `release/` (scratch only).
 
-## Phase 9 — Training course
+## Phase 9 — Training course ✅ DONE
 
-`docs/training/` — 8 sessions per the syllabus; each with objectives,
-prereqs, instructor script, hands-on lab (on the trial/52 sandbox or a
-fresh clone — never on live prod paths), commands, expected output, quiz,
-common errors. Labs are designed to be non-destructive (use `/test-echo`
-and throwaway routes prefixed `train-`).
+**Result (2026-10-20):** `docs/training/` created — index + 8 sessions:
+01 Architecture & first install, 02 Services & routes (Admin API),
+03 Plugins (custom & bundled), 04 Authentication & security,
+05 Management UI, 06 AI gateway, 07 GitOps (export/import/backup/
+restore), 08 Operations (multi-env, load, troubleshooting). Each session
+has objectives, prerequisites, instructor script, a non-destructive
+hands-on lab (`train-` prefixed throwaway objects, `/test-echo` target,
+explicit cleanup steps), expected output, quiz, and a common-errors
+table. All commands reference real scripts in the repo. LF-verified,
+sanitization scan clean.
 
 ## Phase 10 — Acceptance test suite (recorded)
 
